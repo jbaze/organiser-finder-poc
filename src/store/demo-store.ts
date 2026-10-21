@@ -57,6 +57,7 @@ interface DemoActions {
   removeSuppression: (id: string) => void;
 
   addProduct: (name: string, audienceTypes: OrganiserType[], campaignName: string) => void;
+  setProductCampaign: (productId: string, campaignId: string) => void;
   updateSource: (id: SourceId, patch: Partial<Pick<Source, "enabled" | "consentBasis">>) => void;
   updateCompliance: (patch: Partial<ComplianceSettings>) => void;
 }
@@ -316,6 +317,8 @@ export const useDemoStore = create<DemoState>()(
               products: [...s.products, { id: uid("prd"), name, audienceTypes, campaignId }],
             };
           }),
+        setProductCampaign: (productId, campaignId) =>
+          set((s) => ({ products: s.products.map((p) => (p.id === productId ? { ...p, campaignId } : p)) })),
         updateSource: (id, patch) =>
           set((s) => ({ sources: s.sources.map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
         updateCompliance: (patch) => set((s) => ({ compliance: { ...s.compliance, ...patch } })),
