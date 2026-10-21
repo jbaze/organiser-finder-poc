@@ -14,7 +14,7 @@ import type {
   SourceId,
   SuppressionEntry,
 } from "@/lib/types";
-import { buildRunLog, createRng, daysAgo, formatPhone, generateOrganiser, int, pick, type Rng } from "./generate";
+import { buildRunLog, createRng, daysAgo, formatPhone, generateOrganiser, int, makeName, pick, slugify, type Rng } from "./generate";
 import { CAMPAIGNS, ORGANISER_TYPES, PRODUCTS, SOURCES, STATES } from "./reference";
 
 const BASE_ORGANISERS = 135;
@@ -160,6 +160,12 @@ export function buildSeed(now: Date = new Date()): DemoData {
     }
   }
 
+  // Guarantee a few of each outcome so the suppression list and feed show every kind of event.
+  const live = organisers.filter((o) => o.outreachStatus === "in_instantly");
+  (["bounced", "bounced", "unsubscribed", "replied"] as OutreachStatus[]).forEach((status, i) => {
+    if (live[i]) live[i].outreachStatus = status;
+  });
+
   // Uncertain match pairs: some are real duplicates, some are different organisers sharing a building.
   const matches: MatchCandidate[] = [];
   let next = BASE_ORGANISERS + 1;
@@ -174,21 +180,30 @@ export function buildSeed(now: Date = new Date()): DemoData {
     const id = `org_${String(next).padStart(3, "0")}`;
     const twin = generateOrganiser(rng, { id, type: base.type, state: base.state, now, runId: base.runId, usedNames, allowedSources: [otherSource] });
 
-    const name = isDuplicate
-      ? variantOf(rng, base.name)
-      : twin.name.startsWith(base.suburb) ? twin.name : `${base.suburb} ${twin.name}`;
+    // Duplicates: another spelling of the same name. Non-duplicates: a different organiser in the same building.
+    let name = isDuplicate ? variantOf(rng, base.name) : makeName(rng, base.type, base.suburb).canonical;
+    for (let tries = 0; !isDuplicate && (name === base.name || usedNames.has(name)) && tries < 10; tries++) {
+      name = makeName(rng, base.type, base.suburb).canonical;
+    }
+    const domain = `example-${slugify(name)}.test`;
+    const oldDomain = twin.website.replace("https://www.", "");
 
     Object.assign(twin, {
       name,
       suburb: base.suburb,
       postcode: base.postcode,
       address: base.address,
+      website: `https://www.${domain}`,
       phone: formatPhone(normalisePhone(baseRecord.phone), 1),
+      contacts: twin.contacts.map((c) => ({ ...c, email: c.email.replace(oldDomain, domain) })),
     });
     twin.sourceRecords = [
       {
         ...twin.sourceRecords[0],
         rawName: name,
+        website: twin.website,
+        email: twin.contacts[0].email,
+        sourceUrl: twin.sourceRecords[0].sourceUrl.replace(/[^/]+$/, slugify(name)),
         suburb: base.suburb,
         postcode: base.postcode,
         address: base.address.replace(/ Street$| Road$| Avenue$| Parade$/, (m) => ({ " Street": " St", " Road": " Rd", " Avenue": " Ave", " Parade": " Pde" })[m] ?? m),
